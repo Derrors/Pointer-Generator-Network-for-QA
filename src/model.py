@@ -4,7 +4,7 @@
 @Description  : 模型结构
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:08:26
-@Last update  : 2021-02-24 10:31:11
+@Last update  : 2021-02-25 20:19:51
 """
 
 import torch
@@ -238,19 +238,15 @@ class Model(nn.Module):
 
         # decoder与encoder参数共享
         decoder.embedding.weight = encoder.embedding.weight
+
         if is_eval:
             encoder = encoder.eval()
             decoder = decoder.eval()
             reduce_state = reduce_state.eval()
 
-        if config.USE_CUDA:
-            encoder = encoder.to(config.DEVICE)
-            decoder = decoder.to(config.DEVICE)
-            reduce_state = reduce_state.to(config.DEVICE)
-
-        self.encoder = encoder
-        self.decoder = decoder
-        self.reduce_state = reduce_state
+        self.encoder = encoder.to(config.DEVICE)
+        self.decoder = decoder.to(config.DEVICE)
+        self.reduce_state = reduce_state.to(config.DEVICE)
 
         if model_file_path is not None:
             state = torch.load(model_file_path, map_location=lambda storage, location: storage)
