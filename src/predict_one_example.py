@@ -4,7 +4,7 @@
 @Description  : 生成单个问题的答案
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:49:00
-@Last update  : 2021-02-25 15:11:45
+@Last update  : 2021-02-25 20:20:59
 """
 
 import time
@@ -78,10 +78,7 @@ class BeamSearch(object):
             latest_tokens = [h.latest_token for h in beams]
             latest_tokens = [t if t < self.vocab.size() else self.vocab.word2id(data.UNKNOWN_TOKEN)
                              for t in latest_tokens]
-            y_t_1 = torch.tensor(latest_tokens, dtype=torch.long)
-
-            if config.USE_CUDA:
-                y_t_1 = y_t_1.to(config.DEVICE)
+            y_t_1 = torch.tensor(latest_tokens, dtype=torch.long, device=config.DEVICE)
 
             all_state_h = []
             all_state_c = []
