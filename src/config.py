@@ -4,22 +4,19 @@
 @Description  : 模型训练参数
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:07:11
-@Last update  : 2021-02-25 14:42:34
+@Last update  : 2021-02-26 10:06:30
 """
 
 import torch
 import random
 
 # CPU/显卡
-USE_CUDA = torch.cuda.is_available()
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # 随机数种子
 SEED = 2021
 random.seed(SEED)
-torch.manual_seed(SEED)
-if USE_CUDA:
-    torch.cuda.manual_seed_all(SEED)
+torch.cuda.manual_seed_all(SEED)
 
 # 路径
 model_file_path = None
