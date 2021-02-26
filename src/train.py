@@ -4,7 +4,7 @@
 @Description  : 模型训练
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:18:38
-@Last update  : 2021-02-25 14:41:38
+@Last update  : 2021-02-25 20:10:16
 """
 
 import os
@@ -91,7 +91,7 @@ class Train(object):
 
         enc_batch, enc_padding_mask, enc_lens, enc_batch_extend_vocab, extra_zeros, c_t_1, coverage = \
             get_input_from_batch(batch)
-        dec_batch, dec_padding_mask, max_dec_len, dec_lens_var, target_batch = \
+        dec_batch, dec_padding_mask, max_dec_len, dec_lens, target_batch = \
             get_output_from_batch(batch)
 
         self.optimizer.zero_grad()
@@ -127,7 +127,7 @@ class Train(object):
             step_losses.append(step_loss)
 
         sum_losses = torch.sum(torch.stack(step_losses, 1), 1)
-        batch_avg_loss = sum_losses / dec_lens_var
+        batch_avg_loss = sum_losses / dec_lens
         loss = torch.mean(batch_avg_loss)
 
         loss.backward()
