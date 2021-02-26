@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-@Description  : 词表处理
+@Description  : 数据处理
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:58:19
-@Last update  : 2021-02-25 15:06:03
+@Last update  : 2021-02-26 09:57:50
 """
 
 import glob
@@ -285,57 +285,35 @@ def show_ans_oovs(answer, vocab, question_oovs):
 
 def get_input_from_batch(batch):
     """处理batch为模型的输入数据"""
-    batch_size = len(batch.enc_lens)
-
-    enc_batch = torch.tensor(batch.enc_batch, dtype=torch.long)
-    enc_padding_mask = torch.tensor(batch.enc_padding_mask, dtype=torch.float)
+    enc_batch = torch.tensor(batch.enc_batch, dtype=torch.long, device=config.DEVICE)
+    enc_padding_mask = torch.tensor(batch.enc_padding_mask, dtype=torch.float, device=config.DEVICE)
     enc_lens = batch.enc_lens
     extra_zeros = None
     enc_batch_extend_vocab = None
 
     if config.pointer_gen:
-        enc_batch_extend_vocab = torch.tensor(batch.enc_batch_extend_vocab, dtype=torch.long)
+        enc_batch_extend_vocab = torch.tensor(batch.enc_batch_extend_vocab, dtype=torch.long, device=config.DEVICE)
         if batch.max_que_oovs > 0:
-            extra_zeros = torch.zeros((batch_size, batch.max_que_oovs))
+            extra_zeros = torch.zeros((batch.batch_size, batch.max_que_oovs), device=config.DEVICE)
 
-    c_t_1 = torch.zeros((batch_size, 2 * config.hidden_dim))
+    c_t_1 = torch.zeros((batch.batch_size, 2 * config.hidden_dim), device=config.DEVICE)
 
     coverage = None
     if config.is_coverage:
-        coverage = torch.zeros(enc_batch.size())
-
-    if config.USE_CUDA:
-        enc_batch = enc_batch.to(config.DEVICE)
-        enc_padding_mask = enc_padding_mask.to(config.DEVICE)
-
-    if enc_batch_extend_vocab is not None:
-        enc_batch_extend_vocab = enc_batch_extend_vocab.to(config.DEVICE)
-    if extra_zeros is not None:
-        extra_zeros = extra_zeros.to(config.DEVICE)
-    c_t_1 = c_t_1.to(config.DEVICE)
-
-    if coverage is not None:
-        coverage = coverage.to(config.DEVICE)
+        coverage = torch.zeros(enc_batch.size(), device=config.DEVICE)
 
     return enc_batch, enc_padding_mask, enc_lens, enc_batch_extend_vocab, extra_zeros, c_t_1, coverage
 
 
 def get_output_from_batch(batch):
-    dec_batch = torch.tensor(batch.dec_batch, dtype=torch.long)
-    dec_padding_mask = torch.tensor(batch.dec_padding_mask, dtype=torch.float)
-    dec_lens = batch.dec_lens
-    max_dec_len = np.max(dec_lens)
-    dec_lens_var = torch.tensor(dec_lens, dtype=torch.float)
+    dec_batch = torch.tensor(batch.dec_batch, dtype=torch.long, device=config.DEVICE)
+    dec_padding_mask = torch.tensor(batch.dec_padding_mask, dtype=torch.float, device=config.DEVICE)
+    max_dec_len = np.max(batch.dec_lens)
+    dec_lens = torch.tensor(batch.dec_lens, dtype=torch.float, device=config.DEVICE)
 
-    target_batch = torch.tensor(batch.target_batch, dtype=torch.long)
+    target_batch = torch.tensor(batch.target_batch, dtype=torch.long, device=config.DEVICE)
 
-    if config.USE_CUDA:
-        dec_batch = dec_batch.to(config.DEVICE)
-        dec_padding_mask = dec_padding_mask.to(config.DEVICE)
-        dec_lens_var = dec_lens_var.to(config.DEVICE)
-        target_batch = target_batch.to(config.DEVICE)
-
-    return dec_batch, dec_padding_mask, max_dec_len, dec_lens_var, target_batch
+    return dec_batch, dec_padding_mask, max_dec_len, dec_lens, target_batch
 
 
 def get_batch_data_list(data_path, vocab, batch_size, mode):
