@@ -4,7 +4,7 @@
 @Description  : 模型训练
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:18:38
-@Last update  : 2021-02-25 20:10:16
+@Last update  : 2021-02-26 10:14:47
 """
 
 import os
@@ -78,11 +78,10 @@ class Train(object):
 
             if not config.is_coverage:
                 self.optimizer.load_state_dict(state["optimizer"])
-                if config.USE_CUDA:
-                    for state in self.optimizer.state.values():
-                        for k, v in state.items():
-                            if torch.is_tensor(v):
-                                state[k] = v.to(config.DEVICE)
+                for state in self.optimizer.state.values():
+                    for k, v in state.items():
+                        if torch.is_tensor(v):
+                            state[k] = v.to(config.DEVICE)
 
         return start_iter, start_loss
 
