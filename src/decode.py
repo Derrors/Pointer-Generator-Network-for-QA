@@ -4,7 +4,7 @@
 @Description  : decode 阶段，使用 beam search 算法
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:37:33
-@Last update  : 2021-02-25 15:11:22
+@Last update  : 2021-02-26 09:56:14
 """
 
 import os
@@ -88,10 +88,7 @@ class BeamSearch(object):
             latest_tokens = [h.latest_token for h in beams]
             latest_tokens = [t if t < self.vocab.size() else self.vocab.word2id(data.UNKNOWN_TOKEN)
                              for t in latest_tokens]
-            y_t_1 = torch.tensor(latest_tokens, dtype=torch.long)
-
-            if config.USE_CUDA:
-                y_t_1 = y_t_1.to(config.DEVICE)
+            y_t_1 = torch.tensor(latest_tokens, dtype=torch.long, device=config.DEVICE)
 
             all_state_h = []
             all_state_c = []
@@ -204,6 +201,6 @@ class BeamSearch(object):
 
 
 if __name__ == "__main__":
-    model_path = "../log/train_20210224_212437/model/model_50000_20210225_035719"
+    model_path = "../log/train_20210225_145426/model/model_110000_20210226_032511"
     beam_Search_processor = BeamSearch(model_path)
     beam_Search_processor.decode()
