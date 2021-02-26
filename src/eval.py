@@ -4,7 +4,7 @@
 @Description  : 在测试集上评估模型的损失水平
 @Author       : Qinghe Li
 @Create time  : 2021-02-19 11:37:30
-@Last update  : 2021-02-25 15:11:11
+@Last update  : 2021-02-25 20:11:09
 """
 
 import os
@@ -39,7 +39,7 @@ class Evaluate(object):
     def eval_one_batch(self, batch):
         enc_batch, enc_padding_mask, enc_lens, enc_batch_extend_vocab, extra_zeros, c_t_1, coverage = \
             get_input_from_batch(batch)
-        dec_batch, dec_padding_mask, max_dec_len, dec_lens_var, target_batch = \
+        dec_batch, dec_padding_mask, max_dec_len, dec_lens, target_batch = \
             get_output_from_batch(batch)
 
         encoder_outputs, encoder_hidden = self.model.encoder(enc_batch, enc_lens)
@@ -70,7 +70,7 @@ class Evaluate(object):
             step_losses.append(step_loss)
 
         sum_step_losses = torch.sum(torch.stack(step_losses, 1), 1)
-        batch_avg_loss = sum_step_losses / dec_lens_var
+        batch_avg_loss = sum_step_losses / dec_lens
         loss = torch.mean(batch_avg_loss)
 
         return loss.item()
