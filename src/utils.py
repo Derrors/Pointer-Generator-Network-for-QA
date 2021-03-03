@@ -4,7 +4,7 @@
 @Description  : ROUGE 计算、结果处理
 @Author       : Qinghe Li
 @Create time  : 2021-02-16 10:07:28
-@Last update  : 2021-02-24 21:07:39
+@Last update  : 2021-03-03 15:35:01
 """
 
 import os
