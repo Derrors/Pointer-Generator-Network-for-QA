@@ -4,7 +4,7 @@
 @Description  : 词表处理
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:58:19
-@Last update  : 2021-03-03 15:33:56
+@Last update  : 2021-03-03 16:39:31
 """
 
 import glob
@@ -63,7 +63,9 @@ class Vocab(object):
                     self._count += 1
 
                     if max_size != 0 and self._count >= max_size:
-                        print("max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count))
+                        print(
+                            "max_size of vocab was specified as %i; we now have %i words. Stopping reading." %
+                            (max_size, self._count))
                         break
             assert len(self._word_to_id) == len(self._id_to_word) == len(self._embeddings)
         else:
@@ -84,7 +86,9 @@ class Vocab(object):
                     self._count += 1
 
                     if max_size != 0 and self._count >= max_size:
-                        print("max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count))
+                        print(
+                            "max_size of vocab was specified as %i; we now have %i words. Stopping reading." %
+                            (max_size, self._count))
                         break
         print("Finished constructing vocabulary of %i total words. Last word added: %s" %
               (self._count, self._id_to_word[self._count - 1]))
@@ -113,7 +117,7 @@ class Vocab(object):
 
 
 class Example(object):
-    def __init__(self, question, answer, reviews, ratings, label, vocab):
+    def __init__(self, question, answer, reviews, vocab):
         start_decoding = vocab.word2id(START_DECODING)
         stop_decoding = vocab.word2id(STOP_DECODING)
 
@@ -131,10 +135,9 @@ class Example(object):
             ans_ids, config.max_dec_steps, start_decoding, stop_decoding)
         self.dec_len = len(self.dec_input)
 
-        # 处理评论文本、评论评分
+        # 处理评论文本
         self.rev_lens = []
         self.rev_inputs = []
-        self.rating_inputs = ratings
         reviews_words = []
         for review in reviews:
             review_words = review.split()
@@ -143,9 +146,6 @@ class Example(object):
             reviews_words.append(review_words)
             self.rev_lens.append(len(review_words))
             self.rev_inputs.append([vocab.word2id(w) for w in review_words])
-
-        # 处理观点标签
-        self.y_target = label
 
         # 如果使用pointer-generator模式, 需要保存一些额外信息
         if config.pointer_gen:
@@ -206,7 +206,7 @@ class Example(object):
 class Batch(object):
     def __init__(self, example_list, vocab, batch_size):
         self.batch_size = batch_size
-        self.pad_id = vocab.word2id(PAD_TOKEN)     # PAD-id
+        self.pad_id = vocab.word2id(PAD_TOKEN)          # PAD-id
         self.init_encoder_seq(example_list)             # 初始化编码器输入序列
         self.init_decoder_seq(example_list)             # 初始化解码器的输入序列和目标序列
         self.store_orig_strings(example_list)           # 保存原始文本
@@ -229,7 +229,6 @@ class Batch(object):
         self.rev_batch = np.zeros((self.batch_size, config.review_num, max_rev_seq_len), dtype=np.int32)
         self.rev_lens = np.zeros((self.batch_size, config.review_num), dtype=np.int32)
         self.rev_padding_mask = np.zeros((self.batch_size, config.review_num, max_rev_seq_len), dtype=np.float32)
-        self.rating_batch = np.zeros((self.batch_size, config.review_num), dtype=np.int32)
 
         # 填充编码器的输入序列
         for i, ex in enumerate(example_list):
@@ -237,7 +236,6 @@ class Batch(object):
             self.que_lens[i] = ex.que_len
             self.rev_batch[i, :] = ex.rev_inputs[:]
             self.rev_lens[i, :] = ex.rev_lens[:]
-            self.rating_batch[i, :] = ex.rating_inputs[:]
 
             for j in range(ex.que_len):
                 self.que_padding_mask[i][j] = 1
@@ -254,7 +252,8 @@ class Batch(object):
             self.oovs = [ex.oovs for ex in example_list]
             # 考虑OOV词的编码器输入序列
             self.que_batch_extend_vocab = np.zeros((self.batch_size, max_que_seq_len), dtype=np.int32)
-            self.rev_batch_extend_vocab = np.zeros((self.batch_size, config.review_num, max_rev_seq_len), dtype=np.int32)
+            self.rev_batch_extend_vocab = np.zeros(
+                (self.batch_size, config.review_num, max_rev_seq_len), dtype=np.int32)
 
             for i, ex in enumerate(example_list):
                 self.que_batch_extend_vocab[i, :] = ex.que_input_extend_vocab[:]
@@ -271,13 +270,12 @@ class Batch(object):
         self.target_batch = np.zeros((self.batch_size, config.max_dec_steps), dtype=np.int32)
         self.dec_padding_mask = np.zeros((self.batch_size, config.max_dec_steps), dtype=np.float32)
         self.dec_lens = np.zeros((self.batch_size), dtype=np.int32)
-        self.y_batch = np.zeros((self.batch_size), dtype=np.int32)
 
         for i, ex in enumerate(example_list):
             self.dec_batch[i, :] = ex.dec_input[:]
             self.target_batch[i, :] = ex.target[:]
             self.dec_lens[i] = ex.dec_len
-            self.y_batch[i] = ex.y_target
+
             for j in range(ex.dec_len):
                 self.dec_padding_mask[i][j] = 1
 
@@ -373,7 +371,6 @@ def get_input_from_batch(batch):
     rev_batch = torch.tensor(batch.rev_batch, dtype=torch.long, device=config.DEVICE)
     rev_padding_mask = torch.tensor(batch.rev_padding_mask, dtype=torch.float, device=config.DEVICE)
     rev_lens = torch.tensor(batch.rev_lens, dtype=torch.long)
-    rating_batch = torch.tensor(batch.rating_batch, dtype=torch.long, device=config.DEVICE)
 
     extra_zeros = None
     que_batch_extend_vocab = None
@@ -394,7 +391,7 @@ def get_input_from_batch(batch):
         que_coverage = torch.zeros(que_batch.size(), device=config.DEVICE)
         rev_coverage = torch.zeros(rev_batch.size(), device=config.DEVICE).view(batch.batch_size, -1)
 
-    return que_batch, que_padding_mask, que_lens, que_batch_extend_vocab, rev_batch, rev_padding_mask, rev_lens, rev_batch_extend_vocab, extra_zeros, rating_batch, c_t_0, que_coverage, rev_coverage
+    return que_batch, que_padding_mask, que_lens, que_batch_extend_vocab, rev_batch, rev_padding_mask, rev_lens, rev_batch_extend_vocab, extra_zeros, c_t_0, que_coverage, rev_coverage
 
 
 def get_output_from_batch(batch):
@@ -404,9 +401,8 @@ def get_output_from_batch(batch):
 
     max_dec_len = np.max(batch.dec_lens)
     target_batch = torch.tensor(batch.target_batch, dtype=torch.long, device=config.DEVICE)
-    y_batch = torch.tensor(batch.y_batch, dtype=torch.long, device=config.DEVICE)
 
-    return dec_batch, dec_padding_mask, max_dec_len, dec_lens, target_batch, y_batch
+    return dec_batch, dec_padding_mask, max_dec_len, dec_lens, target_batch
 
 
 def get_batch_data_list(data_path, vocab, batch_size, mode):
@@ -435,18 +431,12 @@ def get_batch_data_list(data_path, vocab, batch_size, mode):
             question_text = e.features.feature["question"].bytes_list.value[0].decode().strip()
             answer_text = e.features.feature["answer"].bytes_list.value[0].decode().strip()
             reviews = eval(e.features.feature["reviews"].bytes_list.value[0].decode().strip())
-            ratings = eval(e.features.feature["ratings"].bytes_list.value[0].decode().strip())
-            label = e.features.feature["label"].bytes_list.value[0].decode()
 
             if len(question_text) == 0 or len(answer_text) == 0:
                 continue
 
-            # 方便后续处理为OneHot形式
-            for i in range(len(ratings)):
-                ratings[i] -= 1
-
             # 处理为一个Example对象,并加入到数据列表中
-            example = Example(question_text, answer_text, reviews, ratings, label, vocab)
+            example = Example(question_text, answer_text, reviews, vocab)
             examples_list.append(example)
         reader.close()
 

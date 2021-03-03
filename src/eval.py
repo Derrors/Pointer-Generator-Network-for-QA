@@ -4,7 +4,7 @@
 @Description  : 在测试集上评估模型的损失水平
 @Author       : Qinghe Li
 @Create time  : 2021-02-19 11:37:30
-@Last update  : 2021-03-03 15:34:14
+@Last update  : 2021-03-03 16:46:52
 """
 
 import os
@@ -39,9 +39,9 @@ class Evaluate(object):
         self.cross_loss = nn.CrossEntropyLoss()
 
     def eval_one_batch(self, batch):
-        que_batch, que_padding_mask, que_lens, que_batch_extend_vocab, rev_batch, rev_padding_mask, rev_lens, rev_batch_extend_vocab, extra_zeros, rating_batch, c_t_0, que_coverage, rev_coverage = \
+        que_batch, que_padding_mask, que_lens, que_batch_extend_vocab, rev_batch, rev_padding_mask, rev_lens, rev_batch_extend_vocab, extra_zeros, c_t_0, que_coverage, rev_coverage = \
             get_input_from_batch(batch)
-        dec_batch, dec_padding_mask, max_dec_len, dec_lens, target_batch, y_batch = \
+        dec_batch, dec_padding_mask, max_dec_len, dec_lens, target_batch = \
             get_output_from_batch(batch)
 
         H_q, q_state = self.model.encoder(que_batch, que_lens)          # (b, l_q, 2h), ((2, b, h), (2, b, h))
@@ -49,11 +49,9 @@ class Evaluate(object):
             rev_batch.view(config.batch_size * config.review_num, -1),
             rev_lens.view(config.batch_size * config.review_num, ))     # (b * k, l_r, 2h), ((2, b * k, h), (2, b * k, h))
 
-        pai_q, pai_r, m = self.model.co_attention(H_q, H_rs, que_padding_mask, rev_padding_mask)
+        pai_q, pai_r = self.model.co_attention(H_q, H_rs, que_padding_mask, rev_padding_mask)
 
-        _m, beta, p_o, opinion = self.model.opinion_classifier(m, rating_batch)
-
-        s_t = self.model.reduce_state(q_state, opinion)              # (h, c) = ((1, b, h), (1, b, h))
+        s_t = self.model.reduce_state(q_state)              # (h, c) = ((1, b, h), (1, b, h))
         c_q_t = c_t_0
         c_r_t = c_t_0
 
@@ -64,7 +62,7 @@ class Evaluate(object):
                 self.model.decoder(y_t, s_t, c_q_t, c_r_t,
                                    pai_q, que_padding_mask, que_batch_extend_vocab,
                                    pai_r, rev_padding_mask, rev_batch_extend_vocab,
-                                   extra_zeros, que_coverage, rev_coverage, beta, _m, di)
+                                   extra_zeros, que_coverage, rev_coverage, di)
 
             target = target_batch[:, di]
             gold_probs = torch.gather(final_dist, 1, target.unsqueeze(1)).squeeze()
@@ -79,10 +77,8 @@ class Evaluate(object):
             step_loss = step_loss * step_mask
             step_losses.append(step_loss)
 
-        sum_losses = torch.sum(torch.stack(step_losses, 1), 1) / dec_lens
-        avg_loss = torch.mean(sum_losses)
-        om_loss = self.cross_loss(p_o, y_batch) * config.om_loss_wt
-        loss = avg_loss + om_loss
+        avg_loss = torch.sum(torch.stack(step_losses, 1), 1) / dec_lens
+        loss = torch.mean(avg_loss)
 
         return loss.item()
 

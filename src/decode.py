@@ -4,7 +4,7 @@
 @Description  : decode 阶段，使用 beam search 算法
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:37:33
-@Last update  : 2021-03-03 15:34:06
+@Last update  : 2021-03-03 16:44:45
 """
 
 import os
@@ -69,7 +69,7 @@ class BeamSearch(object):
 
     def beam_search(self, batch):
         # 每个batch中只有1个样例被复制beam_size次
-        que_batch, que_padding_mask, que_lens, que_batch_extend_vocab, rev_batch, rev_padding_mask, rev_lens, rev_batch_extend_vocab, extra_zeros, rating_batch, c_t_0, que_coverage, rev_coverage = \
+        que_batch, que_padding_mask, que_lens, que_batch_extend_vocab, rev_batch, rev_padding_mask, rev_lens, rev_batch_extend_vocab, extra_zeros, c_t_0, que_coverage, rev_coverage = \
             get_input_from_batch(batch)
 
         H_q, q_state = self.model.encoder(que_batch, que_lens)          # (b, l_q, 2h), ((2, b, h), (2, b, h))
@@ -77,11 +77,9 @@ class BeamSearch(object):
             rev_batch.view(config.beam_size * config.review_num, -1),
             rev_lens.view(config.beam_size * config.review_num, ))     # (b * k, l_r, 2h), ((2, b * k, h), (2, b * k, h))
 
-        pai_q, pai_r, m = self.model.co_attention(H_q, H_rs, que_padding_mask, rev_padding_mask)
+        pai_q, pai_r = self.model.co_attention(H_q, H_rs, que_padding_mask, rev_padding_mask)
 
-        _m, beta, p_o, opinion = self.model.opinion_classifier(m, rating_batch)
-
-        s_t = self.model.reduce_state(q_state, opinion)              # (h, c) = ((1, b, h), (1, b, h))
+        s_t = self.model.reduce_state(q_state)              # (h, c) = ((1, b, h), (1, b, h))
 
         dec_h, dec_c = s_t
         dec_h = dec_h.squeeze()
@@ -135,7 +133,7 @@ class BeamSearch(object):
                 self.model.decoder(y_t_1, s_t_1, c_q_t_1, c_r_t_1,
                                    pai_q, que_padding_mask, que_batch_extend_vocab,
                                    pai_r, rev_padding_mask, rev_batch_extend_vocab,
-                                   extra_zeros, que_coverage_t_1, rev_coverage_t_1, beta, _m, steps)
+                                   extra_zeros, que_coverage_t_1, rev_coverage_t_1, steps)
 
             log_probs = torch.log(final_dist)
             topk_log_probs, topk_ids = torch.topk(log_probs, config.beam_size * 2)

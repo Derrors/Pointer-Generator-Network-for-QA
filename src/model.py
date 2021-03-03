@@ -4,7 +4,7 @@
 @Description  : 模型结构
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:08:26
-@Last update  : 2021-03-03 15:34:35
+@Last update  : 2021-03-03 16:39:22
 """
 
 import torch
@@ -66,17 +66,17 @@ class ReduceState(nn.Module):
     def __init__(self):
         super(ReduceState, self).__init__()
 
-        self.reduce_h = nn.Linear(config.hidden_dim * 6 + 5, config.hidden_dim)
-        self.reduce_c = nn.Linear(config.hidden_dim * 6 + 5, config.hidden_dim)
+        self.reduce_h = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
+        self.reduce_c = nn.Linear(config.hidden_dim * 2, config.hidden_dim)
 
-    def forward(self, hidden, opinion):
+    def forward(self, hidden):
         h, c = hidden       # ((2, b, h), (2, b, h))
 
         h_in = h.transpose(0, 1).contiguous().view(-1, config.hidden_dim * 2)   # (b, 2h)
         c_in = c.transpose(0, 1).contiguous().view(-1, config.hidden_dim * 2)   # (b, 2h)
 
-        hidden_reduced_h = F.relu(self.reduce_h(torch.cat([h_in, opinion], dim=-1)))    # (b, h)
-        hidden_reduced_c = F.relu(self.reduce_c(torch.cat([c_in, opinion], dim=-1)))    # (b, h)
+        hidden_reduced_h = F.relu(self.reduce_h(h_in))    # (b, h)
+        hidden_reduced_c = F.relu(self.reduce_c(c_in))    # (b, h)
 
         return (hidden_reduced_h.unsqueeze(0), hidden_reduced_c.unsqueeze(0))           # (1, b, h)
 
@@ -108,58 +108,7 @@ class CoAttention(nn.Module):
                                                               l_r, -1)                        # (b, k, l_r, 2h)
         pai_r = _pai_r.reshape(b, -1, config.hidden_dim * 2)        # (b, k * l_r, 2h)
 
-        m_q = alpha_q.bmm(H_q)                              # (b, k, 2h)
-        m_r = alpha_r.unsqueeze(2).matmul(H_rs.view(b, config.review_num, l_r, -1)).squeeze(2)     # (b, k, 2h)
-        m = torch.cat([m_q, m_r], dim=-1)                   # (b, k, 4h)
-
-        return pai_q, pai_r, m
-
-
-class OpinionClassifier(nn.Module):
-    def __init__(self):
-        super(OpinionClassifier, self).__init__()
-        self.attention = nn.Sequential(
-            nn.Linear(config.hidden_dim * 4 + 5, config.hidden_dim * 4 + 5, bias=False),
-            nn.Tanh(),
-            nn.Linear(config.hidden_dim * 4 + 5, 1, bias=False))
-
-        self.classifier = nn.Linear(config.hidden_dim * 4 + 5, 3)
-
-    def forward(self, m, ratings):
-        ratings = F.one_hot(ratings, num_classes=5).float()     # (b, k, 5)
-        _m = torch.cat([m, ratings], dim=-1)                    # (b, k, 4h + 5)
-
-        beta = F.softmax(self.attention(_m), dim=-1)            # (b, k, 1)
-        opinion = _m.transpose(1, 2).bmm(beta).squeeze(2)       # (b, 4h + 5)
-        p_o = F.softmax(self.classifier(opinion), dim=1)
-
-        return _m, beta, p_o, opinion
-
-
-class OpinionFusion(nn.Module):
-    def __init__(self):
-        super(OpinionFusion, self).__init__()
-
-        if config.opinion_fusion_mode == "dynamic":
-            self.W_o = nn.Linear(config.hidden_dim * 4 + 5, config.hidden_dim * 2, bias=False)
-            self.W_os = nn.Linear(config.hidden_dim * 2, config.hidden_dim * 2)
-            self.vo = nn.Linear(config.hidden_dim * 2, 1, bias=False)
-
-    def forward(self, alpha_r_t, rev_padding_mask, beta, m, s_t_hat):
-        batch, k, _ = m.size()
-        if config.opinion_fusion_mode == "dynamic":
-            o = beta * m                                                        # (b, k, 4h +5)
-            s_t_hat = s_t_hat.unsqueeze(1).expand(
-                batch, k, config.hidden_dim * 2).contiguous()                   # (b, k, 2h)
-            opinion_feature = torch.tanh(self.W_o(o) + self.W_os(s_t_hat))
-            beta = F.softmax(self.vo(opinion_feature), dim=1)                   # (b, k, 1)
-
-        _alpha_r_t = beta * alpha_r_t.view(batch, k, -1) * rev_padding_mask     # (b, k, l_r)
-        _alpha_r_t = _alpha_r_t.reshape(batch, -1)                              # (b, k * l_r)
-        normalization_factor = _alpha_r_t.sum(1, keepdim=True)
-        alpha_r_t_hat = (_alpha_r_t / normalization_factor)                     # (b, k * l_r)
-
-        return alpha_r_t_hat
+        return pai_q, pai_r
 
 
 class QuestionAttention(nn.Module):
@@ -232,20 +181,17 @@ class ReviewAttention(nn.Module):
         self.W_rs = nn.Linear(config.hidden_dim * 2, config.hidden_dim * 2)
         self.v_r = nn.Linear(config.hidden_dim * 2, 1, bias=False)
 
-        self.opinion_fusion = OpinionFusion()
-
-    def forward(self, s_t_hat, pai_r, rev_padding_mask, rev_coverage, beta, m):
+    def forward(self, s_t_hat, pai_r, rev_padding_mask, rev_coverage):
         """
         Args:
             s_t_hat: (b, 2h)                    当前解码器的状态
             pai_r: (b, k * l_r, 2h)             co-attention后的评论表示
             rev_padding_mask: (b, k, l_r)       评论序列的mask
             rev_coverage: (b, k * l_r)          当前记录的rev_coverage
-            beta: (b, k, 1)                     评论级别的attention权重
-            m: (b, k, 4h + 5)                   观点表示
+
         Return:
             c_r_t: (b, 2h)                      当前step的评论的上下文
-            alpha_r_t_hat: (b, k * l_r)         融合了观点意见的评论注意力权重
+            alpha_r_t: (b, k * l_r)             评论注意力权重
             rev_coverage: (b, k * l_r)          更新后的rev_coverage
         """
         batch, seq_len, hidden_size = pai_r.size()                      # (b, k * l_r, 2h)
@@ -272,13 +218,12 @@ class ReviewAttention(nn.Module):
         c_r_t = torch.bmm(alpha_r_t, pai_r).squeeze(1)                  # (b, 2h)
 
         alpha_r_t = alpha_r_t.squeeze(1)                                # (b, k * l_r)
-        alpha_r_t_hat = self.opinion_fusion(alpha_r_t, rev_padding_mask, beta, m, s_t_hat)  # (b, k * l_r)
 
         if config.is_coverage:
             rev_coverage = rev_coverage.view(batch, seq_len)
-            rev_coverage = rev_coverage + alpha_r_t_hat
+            rev_coverage = rev_coverage + alpha_r_t
 
-        return c_r_t, alpha_r_t_hat, rev_coverage
+        return c_r_t, alpha_r_t, rev_coverage
 
 
 class Decoder(nn.Module):
@@ -311,7 +256,7 @@ class Decoder(nn.Module):
             nn.Linear(config.hidden_dim * 2, config.vocab_size))
 
     def forward(self, y_t, s_t_0, c_q_t_0, c_r_t_0, pai_q, que_padding_mask, que_batch_extend_vocab,
-                pai_r, rev_padding_mask, rev_batch_extend_vocab, extra_zeros, que_coverage, rev_coverage, beta, _m, step):
+                pai_r, rev_padding_mask, rev_batch_extend_vocab, extra_zeros, que_coverage, rev_coverage, step):
         """
         Args:
             y_t: (b, )                              当前decoder的输入单词
@@ -327,8 +272,6 @@ class Decoder(nn.Module):
             extra_zeros:                            OOV词预留，用于拓展词表
             que_coverage
             rev_coverage:                           当前记录的coverage
-            beta: (b, k, 1)
-            _m: (b, k, 4h + 5)
             step:                                   当前步
         Return:
             final_dist:                             当前解码得到的词的分布
@@ -348,7 +291,7 @@ class Decoder(nn.Module):
             c_q_t, _, que_coverage_next = self.que_attention(s_t_hat, pai_q,
                                                              que_padding_mask, que_coverage)
             c_r_t, _, rev_coverage_next = self.rev_attention(s_t_hat, pai_r, rev_padding_mask,
-                                                             rev_coverage, beta, _m)
+                                                             rev_coverage)
             que_coverage = que_coverage_next
             rev_coverage = rev_coverage_next
 
@@ -363,7 +306,7 @@ class Decoder(nn.Module):
         c_q_t, alpha_q_t, q_coverage_next = self.que_attention(s_t_hat, pai_q,
                                                                que_padding_mask, que_coverage)
         c_r_t, alpha_r_t, r_coverage_next = self.rev_attention(s_t_hat, pai_r, rev_padding_mask,
-                                                               rev_coverage, beta, _m)
+                                                               rev_coverage)
 
         if self.training or step > 0:
             que_coverage = q_coverage_next                              # (b, l_q)
@@ -401,10 +344,9 @@ class Model(nn.Module):
         decoder = Decoder(embeddings)
         reduce_state = ReduceState()
         co_attention = CoAttention()
-        opinion_classifier = OpinionClassifier()
 
         # 参数初始化
-        for model in [encoder, decoder, reduce_state, co_attention, opinion_classifier]:
+        for model in [encoder, decoder, reduce_state, co_attention]:
             init_network(model)
 
         # decoder与encoder参数共享
@@ -415,13 +357,11 @@ class Model(nn.Module):
             decoder = decoder.eval()
             reduce_state = reduce_state.eval()
             co_attention = co_attention.eval()
-            opinion_classifier = opinion_classifier.eval()
 
         self.encoder = encoder.to(config.DEVICE)
         self.decoder = decoder.to(config.DEVICE)
         self.reduce_state = reduce_state.to(config.DEVICE)
         self.co_attention = co_attention.to(config.DEVICE)
-        self.opinion_classifier = opinion_classifier.to(config.DEVICE)
 
         if model_file_path is not None:
             state = torch.load(model_file_path, map_location=lambda storage, location: storage)
@@ -429,4 +369,3 @@ class Model(nn.Module):
             self.decoder.load_state_dict(state["decoder_state_dict"], strict=False)
             self.reduce_state.load_state_dict(state["reduce_state_dict"])
             self.co_attention.load_state_dict(state["co_attention_state_dict"])
-            self.opinion_classifier.load_state_dict(state["opinion_classifier_state_dict"])

@@ -4,7 +4,7 @@
 @Description  : 模型训练参数
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:07:11
-@Last update  : 2021-03-03 15:35:29
+@Last update  : 2021-03-03 16:21:35
 """
 
 import torch
@@ -46,7 +46,6 @@ opinion_fusion_mode = "dynamic"
 
 lr = 0.001
 cov_loss_wt = 1.0
-om_loss_wt = 0.2
 eps = 1e-12
 max_grad_norm = 2.0
 max_epochs = 40
