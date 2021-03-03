@@ -4,7 +4,7 @@
 @Description  : 生成单个问题的答案
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:49:00
-@Last update  : 2021-02-25 20:20:59
+@Last update  : 2021-03-03 15:57:49
 """
 
 import time
@@ -31,7 +31,7 @@ def build_batch_by_text(text, vocab):
 class BeamSearch(object):
     def __init__(self, model_file_path, vocab):
         self.vocab = vocab
-        self.model = Model(model_file_path, is_eval=True)
+        self.model = Model(model_file_path, self.vocab.embeddings())
 
     def sort_beams(self, beams):
         return sorted(beams, key=lambda h: h.avg_log_prob, reverse=True)
@@ -42,7 +42,7 @@ class BeamSearch(object):
         output_ids = [int(t) for t in best_summary.tokens[1:]]
         decoded_words = data.outputids2words(output_ids,
                                              self.vocab,
-                                             (batch.art_oovs[0] if config.pointer_gen else None))
+                                             (batch.oovs[0] if config.pointer_gen else None))
 
         try:
             fst_stop_idx = decoded_words.index(data.STOP_DECODING)

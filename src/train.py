@@ -4,7 +4,7 @@
 @Description  : 模型训练
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:18:38
-@Last update  : 2021-02-26 10:14:47
+@Last update  : 2021-03-03 15:51:48
 """
 
 import os
@@ -60,12 +60,10 @@ class Train(object):
         """模型初始化或加载、初始化迭代次数、损失、优化器"""
 
         # 初始化模型
-        self.model = Model(model_file_path)
+        self.model = Model(model_file_path, self.vocab.embeddings())
 
         # 定义优化器
-        # self.optimizer = optim.Adam(params, lr=config.adam_lr)
-        initial_lr = config.lr_coverage if config.is_coverage else config.lr
-        self.optimizer = Adagrad(self.model.parameters(), lr=initial_lr, initial_accumulator_value=0.1)
+        self.optimizer = Adam(self.model.parameters(), lr=config.lr)
 
         # 初始化迭代次数和损失
         start_iter, start_loss = 0, 0
@@ -125,13 +123,12 @@ class Train(object):
             step_loss = step_loss * step_mask
             step_losses.append(step_loss)
 
-        sum_losses = torch.sum(torch.stack(step_losses, 1), 1)
-        batch_avg_loss = sum_losses / dec_lens
-        loss = torch.mean(batch_avg_loss)
+        avg_losses = torch.sum(torch.stack(step_losses, 1), 1) / dec_lens
+        loss = torch.mean(avg_losses)
 
         loss.backward()
 
-        self.norm = clip_grad_norm_(self.model.encoder.parameters(), config.max_grad_norm)
+        clip_grad_norm_(self.model.encoder.parameters(), config.max_grad_norm)
         clip_grad_norm_(self.model.decoder.parameters(), config.max_grad_norm)
         clip_grad_norm_(self.model.reduce_state.parameters(), config.max_grad_norm)
 
@@ -151,14 +148,14 @@ class Train(object):
                 running_avg_loss = calc_running_avg_loss(loss, running_avg_loss, self.summary_writer, iter_step)
                 iter_step += 1
 
-                if iter_step % 100 == 0:
+                if iter_step % 50 == 0:
                     self.summary_writer.flush()
 
-                if iter_step % 1000 == 0:
-                    print("steps %d, seconds for %d batch: %.2f , loss: %f" % (iter_step, 1000, time.time() - start, loss))
+                if iter_step % 200 == 0:
+                    print("steps %d, seconds for %d batch: %.2f , loss: %f" % (iter_step, 200, time.time() - start, loss))
                     start = time.time()
 
-                if iter_step % 5000 == 0:
+                if iter_step % 1000 == 0:
                     self.save_model(running_avg_loss, iter_step)
 
 

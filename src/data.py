@@ -4,7 +4,7 @@
 @Description  : 数据处理
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:58:19
-@Last update  : 2021-02-26 09:57:50
+@Last update  : 2021-03-03 15:49:00
 """
 
 import glob
@@ -18,54 +18,76 @@ import torch
 from tensorflow.core.example import example_pb2
 
 import config
-import data
 
 PAD_TOKEN = "[PAD]"
 UNKNOWN_TOKEN = "[UNK]"
 START_DECODING = "[START]"
 STOP_DECODING = "[STOP]"
 
-# NOTE: [PAD], [UNK], [START], [STOP] 都不加入到词表
-
 
 class Vocab(object):
     def __init__(self, vocab_file, max_size):
         self._word_to_id = {}
         self._id_to_word = {}
+        self._count = 0     # 记录当前词表的词数
+        self._embeddings = None
 
-        # 记录当前词表的词数
-        self._count = 0
-
-        # [UNK], [PAD], [START] and [STOP] 对应的id分别为 0,1,2,3.
-        for w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
+        # [PAD], [UNK], [START] and [STOP] 对应的id分别为 0,1,2,3.
+        for w in [PAD_TOKEN, UNKNOWN_TOKEN, START_DECODING, STOP_DECODING]:
             self._word_to_id[w] = self._count
             self._id_to_word[self._count] = w
             self._count += 1
 
-        # 读取词表文件并建立词典，最大词数为 max_size
-        with open(vocab_file, "r") as vocab_f:
-            for line in vocab_f:
-                pieces = line.split()
+        # 如果词表文件为预训练的Glove向量，则读取对应的词向量
+        if vocab_file.endswith(".txt"):
+            self._embeddings = []
+            for _ in range(4):
+                self._embeddings.append(np.random.rand(config.emb_dim, ))
+            self._embeddings[0] = np.zeros((config.emb_dim, ))
 
-                if len(pieces) != 2:
-                    print("Warning: incorrectly formatted line in vocabulary file: %s\n" % line)
-                    continue
+            # 读取词表文件并建立词典，最大词数为 max_size
+            with open(vocab_file, "r", encoding="utf-8") as vocab_f:
+                for line in vocab_f.readlines():
+                    pieces = line.split()
 
-                w = pieces[0]
-                if w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
-                    raise Exception("[UNK], [PAD], [START] and [STOP] shouldn't be in the vocab file, but %s is" % w)
-                if w in self._word_to_id:
-                    raise Exception("Duplicated word in vocabulary file: %s" % w)
+                    if len(pieces) != config.emb_dim + 1:
+                        continue
 
-                self._word_to_id[w] = self._count
-                self._id_to_word[self._count] = w
-                self._count += 1
+                    w = pieces[0]
+                    if w in self._word_to_id:
+                        continue
 
-                if max_size != 0 and self._count >= max_size:
-                    print("max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count))
-                    break
+                    self._word_to_id[w] = self._count
+                    self._id_to_word[self._count] = w
+                    self._embeddings.append(np.asarray(pieces[1:], dtype=float))
+                    self._count += 1
 
-        print("Finished constructing vocabulary of %i total words. Last word added: %s" % (self._count, self._id_to_word[self._count - 1]))
+                    if max_size != 0 and self._count >= max_size:
+                        print("max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count))
+                        break
+            assert len(self._word_to_id) == len(self._id_to_word) == len(self._embeddings)
+        else:
+            # 读取词表文件并建立词典，最大词数为 max_size
+            with open(vocab_file, "r") as vocab_f:
+                for line in vocab_f:
+                    pieces = line.split()
+
+                    if len(pieces) != 2:
+                        continue
+
+                    w = pieces[0]
+                    if w in self._word_to_id:
+                        continue
+
+                    self._word_to_id[w] = self._count
+                    self._id_to_word[self._count] = w
+                    self._count += 1
+
+                    if max_size != 0 and self._count >= max_size:
+                        print("max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count))
+                        break
+        print("Finished constructing vocabulary of %i total words. Last word added: %s" %
+              (self._count, self._id_to_word[self._count - 1]))
 
     def word2id(self, word):
         """获取单个词语的id"""
@@ -79,6 +101,12 @@ class Vocab(object):
             raise ValueError("Id not found in vocab: %d" % word_id)
         return self._id_to_word[word_id]
 
+    def embeddings(self):
+        if self._embeddings is not None:
+            return torch.tensor(self._embeddings, dtype=torch.float)
+        else:
+            return None
+
     def size(self):
         """获取加上特殊符号后的词汇表数量"""
         return self._count
@@ -86,8 +114,8 @@ class Vocab(object):
 
 class Example(object):
     def __init__(self, question, answer, vocab):
-        start_decoding = vocab.word2id(data.START_DECODING)
-        stop_decoding = vocab.word2id(data.STOP_DECODING)
+        start_decoding = vocab.word2id(START_DECODING)
+        stop_decoding = vocab.word2id(STOP_DECODING)
 
         question_words = question.split()
         answer_words = answer.split()
@@ -108,9 +136,10 @@ class Example(object):
 
         # 如果使用pointer-generator模式, 需要保存一些额外信息
         if config.pointer_gen:
+            self.oovs = []
             # 包含OOV词的文本编码，同时得到问题文本中的OOV词表
-            self.enc_input_extend_vocab, self.question_oovs = data.question2ids(question_words, vocab)
-            ans_ids_extend_vocab = data.answer2ids(answer_words, vocab, self.question_oovs)
+            self.enc_input_extend_vocab, self.oovs = question2ids(question_words, vocab, self.oovs)
+            ans_ids_extend_vocab, self.oovs = answer2ids(answer_words, vocab, self.oovs)
 
             # 考虑问题文本内的OOV单词的目标序列编码
             _, self.target = self.get_dec_inp_targ_seqs(
@@ -148,7 +177,7 @@ class Example(object):
 class Batch(object):
     def __init__(self, example_list, vocab, batch_size):
         self.batch_size = batch_size
-        self.pad_id = vocab.word2id(data.PAD_TOKEN)     # PAD-id
+        self.pad_id = vocab.word2id(PAD_TOKEN)     # PAD-id
         self.init_encoder_seq(example_list)             # 初始化编码器输入序列
         self.init_decoder_seq(example_list)             # 初始化解码器的输入序列和目标序列
         self.store_orig_strings(example_list)           # 保存原始文本
@@ -176,9 +205,9 @@ class Batch(object):
         # pointer-generator 模式下的序列填充
         if config.pointer_gen:
             # 当前batch中OOV词的最大数量
-            self.max_que_oovs = max([len(ex.question_oovs) for ex in example_list])
+            self.max_oovs = max([len(ex.oovs) for ex in example_list])
             # 保存当前batch中的OOV词
-            self.que_oovs = [ex.question_oovs for ex in example_list]
+            self.oovs = [ex.oovs for ex in example_list]
             # 考虑OOV词的编码器输入序列
             self.enc_batch_extend_vocab = np.zeros((self.batch_size, max_enc_seq_len), dtype=np.int32)
             for i, ex in enumerate(example_list):
@@ -206,10 +235,9 @@ class Batch(object):
         self.original_answers = [ex.original_answer for ex in example_list]
 
 
-def question2ids(question_words, vocab):
+def question2ids(question_words, vocab, oovs):
     """返回两个列表：包含oov词汇的问题文本id; 问题文本的oov词汇列表"""
     ids = []
-    oovs = []
     unk_id = vocab.word2id(UNKNOWN_TOKEN)
     for w in question_words:
         i = vocab.word2id(w)
@@ -224,34 +252,34 @@ def question2ids(question_words, vocab):
     return ids, oovs
 
 
-def answer2ids(answer_words, vocab, question_oovs):
+def answer2ids(answer_words, vocab, oovs):
     ids = []
     unk_id = vocab.word2id(UNKNOWN_TOKEN)
     for w in answer_words:
         i = vocab.word2id(w)
         if i == unk_id:
-            if w in question_oovs:
-                vocab_idx = vocab.size() + question_oovs.index(w)
+            if w in oovs:
+                vocab_idx = vocab.size() + oovs.index(w)
                 ids.append(vocab_idx)
             else:
                 ids.append(unk_id)
         else:
             ids.append(i)
-    return ids
+    return ids, oovs
 
 
-def outputids2words(id_list, vocab, question_oovs):
+def outputids2words(id_list, vocab, oovs):
     words = []
     for i in id_list:
         try:
             w = vocab.id2word(i)
         except ValueError:  # OOV
-            assert question_oovs is not None, "Error: model produced a word ID that isn't in the vocabulary. This should not happen in baseline (no pointer-generator) mode"
-            question_oov_idx = i - vocab.size()
+            assert oovs is not None, "Error: model produced a word ID that isn't in the vocabulary. This should not happen in baseline (no pointer-generator) mode"
+            oov_idx = i - vocab.size()
             try:
-                w = question_oovs[question_oov_idx]
+                w = oovs[oov_idx]
             except ValueError:
-                raise ValueError("Error: model produced word ID %i which corresponds to question OOV %i but this example only has %i question OOVs" % (i, question_oov_idx, len(question_oovs)))
+                raise ValueError("Error: model produced word ID %i which corresponds to question OOV %i but this example only has %i question OOVs" % (i, oov_idx, len(oovs)))
         words.append(w)
     return words
 
@@ -264,16 +292,16 @@ def show_que_oovs(question, vocab):
     return out_str
 
 
-def show_ans_oovs(answer, vocab, question_oovs):
+def show_ans_oovs(answer, vocab, oovs):
     unk_token = vocab.word2id(UNKNOWN_TOKEN)
     words = answer.split(" ")
     new_words = []
     for w in words:
         if vocab.word2id(w) == unk_token:  # OOV
-            if question_oovs is None:
+            if oovs is None:
                 new_words.append("__%s__" % w)
             else:  # pointer-generator mode
-                if w in question_oovs:
+                if w in oovs:
                     new_words.append("__%s__" % w)
                 else:
                     new_words.append("!!__%s__!!" % w)
@@ -293,8 +321,8 @@ def get_input_from_batch(batch):
 
     if config.pointer_gen:
         enc_batch_extend_vocab = torch.tensor(batch.enc_batch_extend_vocab, dtype=torch.long, device=config.DEVICE)
-        if batch.max_que_oovs > 0:
-            extra_zeros = torch.zeros((batch.batch_size, batch.max_que_oovs), device=config.DEVICE)
+        if batch.max_oovs > 0:
+            extra_zeros = torch.zeros((batch.batch_size, batch.max_oovs), device=config.DEVICE)
 
     c_t_1 = torch.zeros((batch.batch_size, 2 * config.hidden_dim), device=config.DEVICE)
 

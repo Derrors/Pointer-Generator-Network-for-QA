@@ -4,7 +4,7 @@
 @Description  : decode 阶段，使用 beam search 算法
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:37:33
-@Last update  : 2021-02-26 09:56:14
+@Last update  : 2021-03-03 15:57:00
 """
 
 import os
@@ -58,7 +58,7 @@ class BeamSearch(object):
                                            batch_size=config.beam_size, mode="decode")
         time.sleep(15)
         # 加载模型
-        self.model = Model(model_file_path, is_eval=True)
+        self.model = Model(model_file_path, self.vocab.embeddings())
 
     def sort_beams(self, beams):
         return sorted(beams, key=lambda h: h.avg_log_prob, reverse=True)
@@ -171,7 +171,7 @@ class BeamSearch(object):
             output_ids = [int(t) for t in best_summary.tokens[1:]]
             decoded_words = data.outputids2words(output_ids,
                                                  self.vocab,
-                                                 (batch.que_oovs[0] if config.pointer_gen else None))
+                                                 (batch.oovs[0] if config.pointer_gen else None))
 
             # 如果解码结果中有[STOP]单词，那么去除它
             try:

@@ -4,7 +4,7 @@
 @Description  : 模型结构
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:08:26
-@Last update  : 2021-02-25 20:19:51
+@Last update  : 2021-03-03 16:02:30
 """
 
 import torch
@@ -33,10 +33,15 @@ def init_network(model, method="xavier"):
 
 class Encoder(nn.Module):
     """编码器"""
-    def __init__(self):
+
+    def __init__(self, embeddings=None):
         super(Encoder, self).__init__()
-        # TODO: 使用训练好的 GLOVE 词向量？
-        self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
+
+        if embeddings is not None:
+            self.embedding = nn.Embedding.from_pretrained(embeddings, freeze=False, padding_idx=0)
+        else:
+            self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
+
         self.lstm = nn.LSTM(config.emb_dim,
                             config.hidden_dim,
                             num_layers=1,
@@ -58,6 +63,7 @@ class Encoder(nn.Module):
 
 class ReduceState(nn.Module):
     """将编码器最后一个step的隐层状态进行降维以适应解码器"""
+
     def __init__(self):
         super(ReduceState, self).__init__()
 
@@ -78,6 +84,7 @@ class ReduceState(nn.Module):
 
 class Attention(nn.Module):
     """计算当前解码词与编码序列的Attention"""
+
     def __init__(self):
         super(Attention, self).__init__()
 
@@ -138,11 +145,15 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
     """解码器"""
-    def __init__(self):
+
+    def __init__(self, embeddings=None):
         super(Decoder, self).__init__()
 
-        # TODO: GLOVE
-        self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
+        if embeddings is not None:
+            self.embedding = nn.Embedding.from_pretrained(embeddings, freeze=False, padding_idx=0)
+        else:
+            self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
+
         self.x_context = nn.Linear(config.hidden_dim * 2 + config.emb_dim, config.emb_dim)
 
         self.lstm = nn.LSTM(config.emb_dim,
@@ -226,10 +237,10 @@ class Decoder(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, model_file_path=None, is_eval=False):
+    def __init__(self, model_file_path=None, embeddings=None, is_eval=False):
         super(Model, self).__init__()
-        encoder = Encoder()
-        decoder = Decoder()
+        encoder = Encoder(embeddings)
+        decoder = Decoder(embeddings)
         reduce_state = ReduceState()
 
         # 参数初始化
