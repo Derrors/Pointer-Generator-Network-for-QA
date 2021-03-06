@@ -4,7 +4,7 @@
 @Description  : 在测试集上评估模型的损失水平
 @Author       : Qinghe Li
 @Create time  : 2021-02-19 11:37:30
-@Last update  : 2021-03-06 15:13:42
+@Last update  : 2021-03-06 15:27:45
 """
 
 import os
@@ -95,6 +95,5 @@ class Evaluate(object):
 
 
 if __name__ == "__main__":
-    model_path = "../log/train_20210224_212437/model/model_50000_20210225_035719"
-    eval_processor = Evaluate(model_path)
+    eval_processor = Evaluate(config.eval_model_path)
     eval_processor.run_eval()

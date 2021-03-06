@@ -4,7 +4,7 @@
 @Description  : decode 阶段，使用 beam search 算法
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:37:33
-@Last update  : 2021-03-06 15:16:24
+@Last update  : 2021-03-06 15:27:13
 """
 
 import os
@@ -15,7 +15,7 @@ import config
 import data
 from data import Vocab, get_batch_data_list, get_input_from_batch, get_init_embeddings
 from model import Model
-from utils import write_for_rouge, rouge_eval, rouge_log
+from utils import write_for_eval, eval_decode_result
 
 
 class Beam(object):
@@ -183,11 +183,11 @@ class BeamSearch(object):
             original_answer = batch.original_answers[0]
 
             # 将解码结果以及参考答案处理并写入文件，以便后续计算ROUGE分数
-            write_for_rouge(original_answer,
-                            decoded_words,
-                            counter,
-                            self._rouge_ref_dir,
-                            self._rouge_dec_dir)
+            write_for_eval(original_answer,
+                           decoded_words,
+                           counter,
+                           self.ref_dir,
+                           self.dec_dir)
 
             counter += 1
             if counter % 1000 == 0:
@@ -195,9 +195,8 @@ class BeamSearch(object):
                 start = time.time()
 
         print("Decoder has finished reading dataset.")
-        print("Now starting ROUGE eval...")
-        results_dict = rouge_eval(self._rouge_ref_dir, self._rouge_dec_dir)
-        rouge_log(results_dict, self._decode_dir)
+        print("Now starting eval...")
+        eval_decode_result(self.ref_dir, self.dec_dir)
 
 
 if __name__ == "__main__":
