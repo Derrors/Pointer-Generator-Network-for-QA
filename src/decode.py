@@ -4,7 +4,7 @@
 @Description  : decode 阶段，使用 beam search 算法
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:37:33
-@Last update  : 2021-03-03 15:34:06
+@Last update  : 2021-03-06 15:03:42
 """
 
 import os
@@ -13,9 +13,9 @@ import torch
 
 import config
 import data
-from data import Vocab, get_batch_data_list, get_input_from_batch
+from data import Vocab, get_batch_data_list, get_input_from_batch, get_init_embeddings
 from model import Model
-from utils import write_for_rouge, rouge_eval, rouge_log
+from utils import write_for_eval, eval_decode_result
 
 
 class Beam(object):
@@ -50,10 +50,10 @@ class BeamSearch(object):
     def __init__(self, model_file_path):
         model_name = os.path.basename(model_file_path)
         self._decode_dir = os.path.join(config.log_root, "decode_%s" % (model_name))
-        self._rouge_ref_dir = os.path.join(self._decode_dir, "rouge_ref")
-        self._rouge_dec_dir = os.path.join(self._decode_dir, "rouge_dec_dir")
+        self.ref_dir = os.path.join(self._decode_dir, "ref_dir")
+        self.dec_dir = os.path.join(self._decode_dir, "dec_dir")
         # 创建3个目录
-        for p in [self._decode_dir, self._rouge_ref_dir, self._rouge_dec_dir]:
+        for p in [self._decode_dir, self.ref_dir, self.dec_dir]:
             if not os.path.exists(p):
                 os.mkdir(p)
         # 读取并分批测试数据
@@ -62,7 +62,7 @@ class BeamSearch(object):
                                            batch_size=config.beam_size, mode="decode")
         time.sleep(15)
         # 加载模型
-        self.model = Model(model_file_path, self.vocab.embeddings())
+        self.model = Model(model_file_path, get_init_embeddings(self.vocab._id_to_word), is_eval=True)
 
     def sort_beams(self, beams):
         return sorted(beams, key=lambda h: h.avg_log_prob, reverse=True)
@@ -205,11 +205,11 @@ class BeamSearch(object):
             original_answer = batch.original_answers[0]
 
             # 将解码结果以及参考答案处理并写入文件，以便后续计算ROUGE分数
-            write_for_rouge(original_answer,
-                            decoded_words,
-                            counter,
-                            self._rouge_ref_dir,
-                            self._rouge_dec_dir)
+            write_for_eval(original_answer,
+                           decoded_words,
+                           counter,
+                           self.ref_dir,
+                           self.dec_dir)
 
             counter += 1
             if counter % 1000 == 0:
@@ -217,12 +217,10 @@ class BeamSearch(object):
                 start = time.time()
 
         print("Decoder has finished reading dataset.")
-        print("Now starting ROUGE eval...")
-        results_dict = rouge_eval(self._rouge_ref_dir, self._rouge_dec_dir)
-        rouge_log(results_dict, self._decode_dir)
+        print("Now starting eval...")
+        eval_decode_result(self.ref_dir, self.dec_dir)
 
 
 if __name__ == "__main__":
-    model_path = "../log/train_20210302_234644/model/model_12000_20210303_110211"
-    beam_Search_processor = BeamSearch(model_path)
+    beam_Search_processor = BeamSearch(config.decode_model_path)
     beam_Search_processor.decode()

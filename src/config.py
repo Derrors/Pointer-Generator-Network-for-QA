@@ -4,7 +4,7 @@
 @Description  : 模型训练参数
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:07:11
-@Last update  : 2021-03-03 15:35:29
+@Last update  : 2021-03-06 15:03:18
 """
 
 import torch
@@ -19,15 +19,21 @@ random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
-# 路径
-
-# model_file_path = "../log/train_20210303_101005/model/model_45000_20210303_145644"
+# train 路径
+# model_file_path = "../log/train_elec/model/model_elec_0"
 model_file_path = None
 train_data_path = "../data_oaag/home/chunked/train_*"
-decode_data_path = "../data_oaag/home/chunked/test_*"
-eval_data_path = "../data_oaag/home/chunked/test_*"
-vocab_path = "../../glove/glove.42B.300d.txt"
-log_root = "../log"
+vocab_path = "../data_oaag/home/vocab"
+glove_emb_path = "../../glove/glove.42B.300d.txt"
+log_root = "../log/home"
+
+# decode path
+decode_model_path = "../log/train_sport/model/model_sport_1"
+decode_data_path = "../data_oaag/sport/chunked/test_*"
+
+# eval Path
+eval_model_path = None
+eval_data_path = None
 
 # 模型超参数
 hidden_dim = 256
@@ -49,5 +55,5 @@ cov_loss_wt = 1.0
 om_loss_wt = 0.2
 eps = 1e-12
 max_grad_norm = 2.0
-max_epochs = 40
+max_epochs = 20
 review_num = 10

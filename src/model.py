@@ -4,7 +4,7 @@
 @Description  : 模型结构
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:08:26
-@Last update  : 2021-03-03 15:34:35
+@Last update  : 2021-03-06 15:04:00
 """
 
 import torch
@@ -36,9 +36,9 @@ class Encoder(nn.Module):
 
     def __init__(self, embeddings=None):
         super(Encoder, self).__init__()
-        # TODO: 使用训练好的 GLOVE 词向量？
+
         if embeddings is not None:
-            self.embedding = nn.Embedding.from_pretrained(embeddings, freeze=False, padding_idx=0)
+            self.embedding = nn.Embedding.from_pretrained(embeddings, freeze=False, padding_idx=1)
         else:
             self.embedding = nn.Embedding(config.vocab_size, config.emb_dim)
         self.lstm = nn.LSTM(config.emb_dim,
