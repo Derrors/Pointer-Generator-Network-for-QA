@@ -4,7 +4,7 @@
 @Description  : 词表处理
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 15:58:19
-@Last update  : 2021-03-03 16:39:31
+@Last update  : 2021-03-06 15:20:53
 """
 
 import glob
@@ -29,69 +29,32 @@ class Vocab(object):
     def __init__(self, vocab_file, max_size):
         self._word_to_id = {}
         self._id_to_word = {}
-        self._count = 0     # 记录当前词表的词数
-        self._embeddings = None
+        self._count = 0
 
-        # [PAD], [UNK], [START] and [STOP] 对应的id分别为 0,1,2,3.
-        for w in [PAD_TOKEN, UNKNOWN_TOKEN, START_DECODING, STOP_DECODING]:
+        # [UNK], [PAD], [START] and [STOP] get the ids 0,1,2,3.
+        for w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
             self._word_to_id[w] = self._count
             self._id_to_word[self._count] = w
             self._count += 1
 
-        # 如果词表文件为预训练的Glove向量，则读取对应的词向量
-        if vocab_file.endswith(".txt"):
-            self._embeddings = []
-            for _ in range(4):
-                self._embeddings.append(np.random.rand(config.emb_dim, ))
-            self._embeddings[0] = np.zeros((config.emb_dim, ))
-
-            # 读取词表文件并建立词典，最大词数为 max_size
-            with open(vocab_file, "r", encoding="utf-8") as vocab_f:
-                for line in vocab_f.readlines():
-                    pieces = line.split()
-
-                    if len(pieces) != config.emb_dim + 1:
-                        continue
-
-                    w = pieces[0]
-                    if w in self._word_to_id:
-                        continue
-
-                    self._word_to_id[w] = self._count
-                    self._id_to_word[self._count] = w
-                    self._embeddings.append(np.asarray(pieces[1:], dtype=float))
-                    self._count += 1
-
-                    if max_size != 0 and self._count >= max_size:
-                        print(
-                            "max_size of vocab was specified as %i; we now have %i words. Stopping reading." %
-                            (max_size, self._count))
-                        break
-            assert len(self._word_to_id) == len(self._id_to_word) == len(self._embeddings)
-        else:
-            # 读取词表文件并建立词典，最大词数为 max_size
-            with open(vocab_file, "r") as vocab_f:
-                for line in vocab_f:
-                    pieces = line.split()
-
-                    if len(pieces) != 2:
-                        continue
-
-                    w = pieces[0]
-                    if w in self._word_to_id:
-                        continue
-
-                    self._word_to_id[w] = self._count
-                    self._id_to_word[self._count] = w
-                    self._count += 1
-
-                    if max_size != 0 and self._count >= max_size:
-                        print(
-                            "max_size of vocab was specified as %i; we now have %i words. Stopping reading." %
-                            (max_size, self._count))
-                        break
-        print("Finished constructing vocabulary of %i total words. Last word added: %s" %
-              (self._count, self._id_to_word[self._count - 1]))
+        with open(vocab_file, 'r') as vocab_f:
+            for line in vocab_f:
+                pieces = line.split()
+                if len(pieces) != 2:
+                    print('Warning: incorrectly formatted line in vocabulary file: {}'.format(line))
+                    continue
+                w = pieces[0]
+                if w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
+                    raise Exception('[UNK], [PAD], [START] and [STOP] shouldn\'t be in the vocab file, but %s is' % w)
+                if w in self._word_to_id:
+                    raise Exception('Duplicated word in vocabulary file: %s' % w)
+                self._word_to_id[w] = self._count
+                self._id_to_word[self._count] = w
+                self._count += 1
+                if max_size != 0 and self._count >= max_size:
+                    print("max_size of vocab was specified as {}; we now have {} words. Stopping reading.".format(max_size, self._count))
+                    break
+        print("Finished constructing vocabulary of {} total words. Last word added: {}".format(self._count, self._id_to_word[self._count - 1]))
 
     def word2id(self, word):
         """获取单个词语的id"""
@@ -104,12 +67,6 @@ class Vocab(object):
         if word_id not in self._id_to_word:
             raise ValueError("Id not found in vocab: %d" % word_id)
         return self._id_to_word[word_id]
-
-    def embeddings(self):
-        if self._embeddings is not None:
-            return torch.tensor(self._embeddings, dtype=torch.float)
-        else:
-            return None
 
     def size(self):
         """获取加上特殊符号后的词汇表数量"""
@@ -160,7 +117,7 @@ class Example(object):
                 self.rev_inputs_extend_vocab.append(rev_input_extend_vocab)
 
             # 考虑问题文本内的OOV单词的目标序列编码
-            ans_ids_extend_vocab, self.oovs = answer2ids(answer_words, vocab, self.oovs)
+            ans_ids_extend_vocab = answer2ids(answer_words, vocab, self.oovs)
             _, self.target = self.get_dec_inp_targ_seqs(
                 ans_ids_extend_vocab, config.max_dec_steps, start_decoding, stop_decoding)
 
@@ -315,7 +272,7 @@ def answer2ids(answer_words, vocab, oovs):
                 ids.append(unk_id)
         else:
             ids.append(i)
-    return ids, oovs
+    return ids
 
 
 def outputids2words(id_list, vocab, question_oovs):
@@ -456,3 +413,28 @@ def get_batch_data_list(data_path, vocab, batch_size, mode):
 
         random.shuffle(batches_list)
     return batches_list
+
+
+def get_init_embeddings(reversed_dict):
+    word2emb = {}
+    with open(config.glove_emb_path, "r") as fw:
+        for line in fw.readlines():
+            values = line.split()
+            word2emb[values[0]] = np.asarray(values[1:], dtype=np.float32)
+
+    word_vec_list = []
+    for _, word in sorted(reversed_dict.items()):
+        try:
+            word_vec = word2emb[word]
+        except KeyError:
+            word_vec = np.zeros([config.emb_dim], dtype=np.float32)
+
+        word_vec_list.append(word_vec)
+
+    # Assign random vector to <s>, </s> token
+    word_vec_list[2] = np.random.normal(0, 1, config.emb_dim)
+    word_vec_list[3] = np.random.normal(0, 1, config.emb_dim)
+
+    assert len(word_vec_list) == config.vocab_size
+
+    return torch.tensor(word_vec_list, dtype=torch.float, device=config.DEVICE)
