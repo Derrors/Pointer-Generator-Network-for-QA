@@ -4,7 +4,7 @@
 @Description  : 模型训练参数
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:07:11
-@Last update  : 2021-03-06 15:07:45
+@Last update  : 2021-03-06 15:57:48
 """
 
 import torch
@@ -27,8 +27,8 @@ glove_emb_path = "../../glove/glove.42B.300d.txt"
 log_root = "../log/home"
 
 # decode path
-decode_model_path = "../log/train_sport/model/model_sport_1"
-decode_data_path = "../data_oaag/sport/chunked/test_*"
+decode_model_path = "../log/"
+decode_data_path = "../data_oaag/home/chunked/test_*"
 
 # eval Path
 eval_model_path = None
@@ -39,7 +39,7 @@ hidden_dim = 256
 emb_dim = 300
 batch_size = 100
 beam_size = 4
-max_que_steps = 20
+max_enc_steps = 20
 max_dec_steps = 100
 min_dec_steps = 20
 vocab_size = 50000
