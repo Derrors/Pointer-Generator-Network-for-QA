@@ -4,7 +4,7 @@
 @Description  : 模型训练
 @Author       : Qinghe Li
 @Create time  : 2021-02-22 17:18:38
-@Last update  : 2021-03-03 15:51:48
+@Last update  : 2021-03-06 15:12:47
 """
 
 import os
@@ -16,7 +16,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.optim import Adagrad, Adam
 
 import config
-from data import Vocab, get_batch_data_list, get_input_from_batch, get_output_from_batch
+from data import Vocab, get_batch_data_list, get_input_from_batch, get_output_from_batch, get_init_embeddings
 from model import Model
 from utils import calc_running_avg_loss
 
@@ -60,7 +60,7 @@ class Train(object):
         """模型初始化或加载、初始化迭代次数、损失、优化器"""
 
         # 初始化模型
-        self.model = Model(model_file_path, self.vocab.embeddings())
+        self.model = Model(model_file_path, get_init_embeddings(self.vocab._id_to_word))
 
         # 定义优化器
         self.optimizer = Adam(self.model.parameters(), lr=config.lr)

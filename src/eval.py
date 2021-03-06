@@ -4,7 +4,7 @@
 @Description  : 在测试集上评估模型的损失水平
 @Author       : Qinghe Li
 @Create time  : 2021-02-19 11:37:30
-@Last update  : 2021-03-03 15:57:24
+@Last update  : 2021-03-06 15:13:42
 """
 
 import os
@@ -14,7 +14,7 @@ import tensorflow as tf
 import torch
 
 import config
-from data import (Vocab, get_batch_data_list, get_input_from_batch,
+from data import (Vocab, get_batch_data_list, get_input_from_batch, get_init_embeddings,
                   get_output_from_batch)
 from model import Model
 from utils import calc_running_avg_loss
@@ -34,7 +34,7 @@ class Evaluate(object):
             os.mkdir(eval_dir)
 
         self.summary_writer = tf.compat.v1.summary.FileWriter(eval_dir)
-        self.model = Model(model_file_path, self.vocab.embeddings())
+        self.model = Model(model_file_path, get_init_embeddings(self.vocab._id_to_word), is_eval=True)
 
     def eval_one_batch(self, batch):
         enc_batch, enc_padding_mask, enc_lens, enc_batch_extend_vocab, extra_zeros, c_t_1, coverage = \

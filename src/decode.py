@@ -4,7 +4,7 @@
 @Description  : decode 阶段，使用 beam search 算法
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:37:33
-@Last update  : 2021-03-03 15:57:00
+@Last update  : 2021-03-06 15:16:24
 """
 
 import os
@@ -13,7 +13,7 @@ import torch
 
 import config
 import data
-from data import Vocab, get_batch_data_list, get_input_from_batch
+from data import Vocab, get_batch_data_list, get_input_from_batch, get_init_embeddings
 from model import Model
 from utils import write_for_rouge, rouge_eval, rouge_log
 
@@ -58,7 +58,7 @@ class BeamSearch(object):
                                            batch_size=config.beam_size, mode="decode")
         time.sleep(15)
         # 加载模型
-        self.model = Model(model_file_path, self.vocab.embeddings())
+        self.model = Model(model_file_path, get_init_embeddings(self.vocab._id_to_word), is_eval=True)
 
     def sort_beams(self, beams):
         return sorted(beams, key=lambda h: h.avg_log_prob, reverse=True)
@@ -201,6 +201,5 @@ class BeamSearch(object):
 
 
 if __name__ == "__main__":
-    model_path = "../log/train_20210225_145426/model/model_110000_20210226_032511"
-    beam_Search_processor = BeamSearch(model_path)
+    beam_Search_processor = BeamSearch(config.decode_model_path)
     beam_Search_processor.decode()

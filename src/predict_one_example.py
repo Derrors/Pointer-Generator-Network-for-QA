@@ -4,14 +4,14 @@
 @Description  : 生成单个问题的答案
 @Author       : Qinghe Li
 @Create time  : 2021-02-23 16:49:00
-@Last update  : 2021-03-03 15:57:49
+@Last update  : 2021-03-06 15:14:59
 """
 
 import time
 import torch
 import config
 import data
-from data import Batch, Example, Vocab, get_input_from_batch
+from data import Batch, Example, Vocab, get_input_from_batch, get_init_embeddings
 from decode import Beam
 from model import Model
 
@@ -31,7 +31,7 @@ def build_batch_by_text(text, vocab):
 class BeamSearch(object):
     def __init__(self, model_file_path, vocab):
         self.vocab = vocab
-        self.model = Model(model_file_path, self.vocab.embeddings())
+        self.model = Model(model_file_path, get_init_embeddings(self.vocab._id_to_word), is_eval=True)
 
     def sort_beams(self, beams):
         return sorted(beams, key=lambda h: h.avg_log_prob, reverse=True)
